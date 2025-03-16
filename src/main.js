@@ -1,5 +1,7 @@
 import './style.css';
-import { getLeads, getTaskByLeadId } from './amoapi';
+import { subscribe } from './state';
+import { renderLeads, renderLoader } from './render';
+import { getLeads } from './amoapi';
 
 /**
  * Get color class based on the given Unix timestamp.
@@ -17,11 +19,6 @@ function getColorClass(unixTimestamp) {
   today.setHours(0, 0, 0, 0); // Set time components to midnight
   const tomorrow = new Date(today);
   tomorrow.setDate(today.getDate() + 1);
-
-  console.log('Unix Timestamp:', unixTimestamp);
-  console.log('Date:', date);
-  console.log('Today:', today);
-  console.log('Tomorrow:', tomorrow);
 
   if (date >= today && date < tomorrow) {
     return 'fill-green-500';
@@ -170,14 +167,11 @@ window.document.addEventListener('updateCards', (ev) =>
   updateMainUi(ev.detail.data || [], ev.detail.inprogress),
 );
 
-// Initialize the application on load
+// Subscribe to state changes
+subscribe(renderLeads);
+subscribe(renderLoader);
+
+// Initialize the application
 (async () => {
-  window.document.dispatchEvent(
-    new CustomEvent('updateCards', {
-      detail: {
-        inprogress: true,
-      },
-    }),
-  );
   await getLeads();
 })();

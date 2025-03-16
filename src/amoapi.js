@@ -12,7 +12,7 @@ const amoapi = axios.create({
  * @param {number} [startPage=1] - The starting page number to fetch.
  * @param {number} [limit=3] - The number of leads to fetch per page.
  */
-const getLeads = async (startPage = 1, limit = 3) => {
+export const getLeads = async (startPage = 1, limit = 3) => {
   try {
     updateState({ isLoading: true });
 
@@ -103,16 +103,37 @@ const getLeads = async (startPage = 1, limit = 3) => {
   }
 };
 
+/**
+ * Fetch contact details by contact ID.
+ * @param {string} contactId - The ID of the contact.
+ * @returns {Promise<Object>} - The contact details.
+ */
+export const getContactDetails = async (contactId) => {
+  try {
+    const response = await queueManager.enqueue(() =>
+      amoapi.get(`/v4/contacts/${contactId}`),
+    );
+    return response.data;
+  } catch (error) {
+    console.error(
+      `Error fetching contact details for contact ID ${contactId}:`,
+      error,
+    );
+    return null;
+  }
+};
 /** TODO: Keep the last 3 tasks (for example) in memory to avoid redundant requests and ensure it respects concurrency. */
 /**
  * Fetch task by lead ID from the API.
  * @param {string} id - The ID of the lead.
  * @returns {Promise<Object>} - The task data for the lead.
  */
-const getTaskByLeadId = async (id) => {
+export const getTaskByLeadId = async (id) => {
   try {
-    const response = await amoapi.get(
-      `/v4/tasks?filter%5Bentity_type%5D=leads&filter%5Bentity_id%5D=${id}`,
+    const response = await queueManager.enqueue(() =>
+      amoapi.get(
+        `/v4/tasks?filter%5Bentity_type%5D=leads&filter%5Bentity_id%5D=${id}`,
+      ),
     );
     const data = response.data;
     if (data?._embedded?.tasks?.length) {
@@ -125,12 +146,15 @@ const getTaskByLeadId = async (id) => {
       };
     }
   } catch (error) {
-    console.error(
-      'Ooops! something went wrong :) Here must be some error handling',
-      error,
-    );
+    console.error('Error fetching task by lead ID:', error);
+    return {
+      text: 'Error fetching task!',
+      id: 'Error!',
+      complete_till: false,
+    };
   }
 };
+
 /**
  * Global queue manager to handle API requests with configurable concurrency and delay.
  * @param {number} [maxRequestsPerSecond=2] - The maximum number of requests per second.
@@ -177,4 +201,3 @@ const createQueueManager = (maxRequestsPerSecond = 2) => {
 };
 
 const queueManager = createQueueManager(2); // 2 requests per second
-export { getLeads, getTaskByLeadId };
