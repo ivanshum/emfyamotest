@@ -8,51 +8,102 @@ const amoapi = axios.create({
 });
 
 /**
- * Dispatch a custom event to update the UI with the given data.
- * @param {Array} data - The data to update the UI with.
- * @param {boolean} inprogress - The state indicating whether the loading is in progress.
- */
-const dispatchUpdateCardsEvent = (data, inprogress) => {
-  window.document.dispatchEvent(
-    new CustomEvent('updateCards', {
-      detail: {
-        data,
-        inprogress,
-      },
-    }),
-  );
-};
-
-/**
  * Fetch leads from the API with pagination.
- * @param {number} [page=1] - The page number to fetch.
+ * @param {number} [startPage=1] - The starting page number to fetch.
  * @param {number} [limit=3] - The number of leads to fetch per page.
- * @param {Array} [accumulatedData=[]] - The accumulated data from previous pages.
- * @returns {Promise<Array>} - The accumulated leads data.
  */
-const getLeads = async (page = 1, limit = 3, accumulatedData = []) => {
+const getLeads = async (startPage = 1, limit = 3) => {
   try {
-    const response = await amoapi.get(`/v4/leads?page=${page}&limit=${limit}`);
-    const data = response.data;
-    const leads = accumulatedData.concat(data?._embedded.leads);
-    dispatchUpdateCardsEvent(leads, !!data?._links?.next);
+    updateState({ isLoading: true });
 
-    if (data?._links?.next) {
-      // If there are more data, wait for a second and fetch the next batch
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      return getLeads(page + 1, limit, leads);
-    } else {
-      // Return all the accumulated data
-      return leads;
+    let currentPage = startPage;
+    let hasNextPage = true;
+
+    const concurrency = queueManager.maxRequestsPerSecond; // Use the queue manager's concurrency
+
+    while (hasNextPage) {
+      // Fetch up to `concurrency` pages concurrently
+      const pageRequests = [];
+      for (let i = 0; i < concurrency; i++) {
+        pageRequests.push(
+          queueManager.enqueue(() =>
+            amoapi.get(
+              `/v4/leads?page=${currentPage + i}&limit=${limit}&with=contacts`,
+            ),
+          ),
+        );
+      }
+
+      // Wait for all page requests to complete
+      const responses = await Promise.all(pageRequests);
+
+      // Process each response
+      for (const response of responses) {
+        if (response.status === 204 || !response.data) {
+          // Handle 204 No Content or empty response
+          hasNextPage = false;
+          break;
+        }
+
+        const data = response.data;
+        const leads = data?._embedded?.leads || [];
+
+        // Collect all contact detail requests
+        const contactRequests = [];
+        for (const lead of leads) {
+          const contactLinks = lead?._embedded?.contacts?.map((contact) => {
+            const href = contact?._links?.self?.href || '';
+            const contactId = href.split('/').pop().split('?')[0];
+            return contactId;
+          });
+
+          if (contactLinks) {
+            for (const contactId of contactLinks) {
+              if (contactId) {
+                // Enqueue contact detail requests
+                contactRequests.push(
+                  queueManager
+                    .enqueue(() => getContactDetails(contactId))
+                    .then((contactDetails) => {
+                      // Update the lead with contact details
+                      lead.contactName = contactDetails?.name || 'Unknown Name';
+                      const phoneField =
+                        contactDetails?.custom_fields_values?.find(
+                          (field) => field.field_code === 'PHONE',
+                        );
+                      lead.contactPhone =
+                        phoneField?.values?.[0]?.value || 'No Phone Number';
+                    }),
+                );
+              }
+            }
+          }
+        }
+
+        // Wait for all contact detail requests to complete
+        await Promise.all(contactRequests);
+
+        // Update the state with the fetched leads
+        updateState({
+          leads: [...getState().leads, ...leads],
+        });
+
+        // Check if there is a next page
+        hasNextPage = !!data?._links?.next;
+      }
+
+      // Increment the current page by the number of pages fetched
+      currentPage += concurrency;
     }
+
+    updateState({ isLoading: false });
   } catch (error) {
-    console.error(
-      'Ooops! something went wrong :) Here must be some error handling',
-      error,
-    );
+    console.error('Error fetching leads:', error);
+    updateState({ isLoading: false });
   }
 };
 
+/** TODO: Keep the last 3 tasks (for example) in memory to avoid redundant requests and ensure it respects concurrency. */
 /**
  * Fetch task by lead ID from the API.
  * @param {string} id - The ID of the lead.
