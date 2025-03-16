@@ -200,4 +200,4 @@ const createQueueManager = (maxRequestsPerSecond = 2) => {
   };
 };
 
-const queueManager = createQueueManager(2); // 2 requests per second
+export const queueManager = createQueueManager(2); // 2 requests per second

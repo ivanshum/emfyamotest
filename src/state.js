@@ -1,6 +1,7 @@
 const state = {
   leads: [],
   isLoading: false,
+  openedCardId: '',
 };
 
 /**
