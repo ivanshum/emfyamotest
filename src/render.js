@@ -1,3 +1,5 @@
+/** TODO: remake cards as a table with contacts info */
+
 import { getState, updateState } from './state';
 import { queueManager, getTaskByLeadId } from './amoapi';
 

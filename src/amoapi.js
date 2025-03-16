@@ -122,7 +122,7 @@ export const getContactDetails = async (contactId) => {
     return null;
   }
 };
-/** TODO: Keep the last 3 tasks (for example) in memory to avoid redundant requests and ensure it respects concurrency. */
+/** TODO: Keep the last 3 tasks (for example) in memory to avoid redundant requests and ensure it respects concurrency. Add a cancel request option */
 /**
  * Fetch task by lead ID from the API.
  * @param {string} id - The ID of the lead.
