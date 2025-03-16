@@ -3,6 +3,7 @@ const state = {
   isLoading: false,
   openedCardId: '',
   renderedLeads: new Set(), // Track already rendered lead IDs
+  cachedTasks: new Map(), // Cache for the last 3 tasks
 };
 
 /**
@@ -48,4 +49,31 @@ export const markLeadAsRendered = (leadId) => {
  */
 export const isLeadRendered = (leadId) => {
   return state.renderedLeads.has(leadId);
+};
+
+/**
+ * Add a task to the cache.
+ * @param {string} leadId - The ID of the lead.
+ * @param {Object} task - The task data to cache.
+ */
+export const cacheTask = (leadId, task) => {
+  const { cachedTasks } = state;
+
+  // Add the task to the cache
+  cachedTasks.set(leadId, task);
+
+  // Ensure the cache only keeps the last 3 tasks
+  if (cachedTasks.size > 3) {
+    const oldestKey = cachedTasks.keys().next().value;
+    cachedTasks.delete(oldestKey);
+  }
+};
+
+/**
+ * Get a cached task by lead ID.
+ * @param {string} leadId - The ID of the lead.
+ * @returns {Object|null} - The cached task or null if not found.
+ */
+export const getCachedTask = (leadId) => {
+  return state.cachedTasks.get(leadId) || null;
 };

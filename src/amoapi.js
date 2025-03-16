@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { updateState, getState } from './state';
+import { updateState, getState, cacheTask, getCachedTask } from './state';
 
 const amoapi = axios.create({
   baseURL: '/api',
@@ -123,29 +123,35 @@ export const getContactDetails = async (contactId) => {
     return null;
   }
 };
-/** TODO: Keep the last 3 tasks (for example) in memory to avoid redundant requests and ensure it respects concurrency. Add a cancel request option */
 /**
- * Fetch task by lead ID from the API.
+ * Fetch task by lead ID from the API or cache.
  * @param {string} id - The ID of the lead.
  * @param {AbortSignal} signal - The AbortController signal to cancel the request.
  * @returns {Promise<Object>} - The task data for the lead.
  */
 export const getTaskByLeadId = async (id, signal) => {
+  // Check the cache first
+  const cachedTask = getCachedTask(id);
+  if (cachedTask) {
+    return cachedTask;
+  }
+
   try {
     const response = await amoapi.get(
       `/v4/tasks?filter%5Bentity_type%5D=leads&filter%5Bentity_id%5D=${id}`,
       { signal },
     );
     const data = response.data;
-    if (data?._embedded?.tasks?.length) {
-      return data?._embedded?.tasks[0];
-    } else {
-      return {
-        text: 'No task!',
-        id: 'No id!',
-        complete_till: false,
-      };
-    }
+    const task = data?._embedded?.tasks?.[0] || {
+      text: 'No task!',
+      id: 'No id!',
+      complete_till: false,
+    };
+
+    // Cache the task
+    cacheTask(id, task);
+
+    return task;
   } catch (error) {
     if (axios.isCancel(error)) {
       console.warn(`Request for lead ID ${id} was canceled.`);

@@ -1,6 +1,11 @@
 /** TODO: remake cards as a table with contacts info */
 
-import { getState, markLeadAsRendered, isLeadRendered } from './state';
+import {
+  getState,
+  markLeadAsRendered,
+  isLeadRendered,
+  updateState,
+} from './state';
 import { queueManager, getTaskByLeadId } from './amoapi';
 import { debounce } from './utils';
 
@@ -190,6 +195,6 @@ const createCardElement = (cardData) => {
  */
 const updateCardElement = (card, cardData) => {
   card.querySelector('h2').textContent = cardData.name;
-  card.querySelector('.text-sm').textContent = `${cardData.price} €`;
+  card.querySelector('.text-sm').textContent = `${cardData.price} ₽`;
   card.querySelector('.text-xs').textContent = cardData.id;
 };
