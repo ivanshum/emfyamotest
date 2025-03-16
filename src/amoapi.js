@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { updateState, getState } from './state';
 
 const amoapi = axios.create({
   baseURL: '/api',
@@ -64,10 +65,8 @@ const getTaskByLeadId = async (id) => {
     );
     const data = response.data;
     if (data?._embedded?.tasks?.length) {
-      // Return the task data
       return data?._embedded?.tasks[0];
     } else {
-      // If no task is found
       return {
         text: 'No task!',
         id: 'No id!',
@@ -81,5 +80,50 @@ const getTaskByLeadId = async (id) => {
     );
   }
 };
+/**
+ * Global queue manager to handle API requests with configurable concurrency and delay.
+ * @param {number} [maxRequestsPerSecond=2] - The maximum number of requests per second.
+ */
+const createQueueManager = (maxRequestsPerSecond = 2) => {
+  const queue = [];
+  let tokens = maxRequestsPerSecond; // Start with the maximum number of tokens
+  const tokenInterval = 1000 / maxRequestsPerSecond; // Time interval to add one token (in ms)
 
+  // Refill tokens at the configured rate
+  setInterval(() => {
+    if (tokens < maxRequestsPerSecond) {
+      tokens++;
+    }
+    processQueue(); // Attempt to process the queue whenever tokens are refilled
+  }, tokenInterval);
+
+  const processQueue = () => {
+    while (tokens > 0 && queue.length > 0) {
+      const batch = queue.splice(0, tokens); // Take up to the available tokens
+      tokens -= batch.length; // Consume tokens for the batch
+
+      // Process all requests in the batch concurrently
+      batch.forEach(({ fn, resolve, reject }) => {
+        fn()
+          .then(resolve)
+          .catch(reject)
+          .finally(() => {
+            // After the request is resolved, attempt to process the queue again
+            processQueue();
+          });
+      });
+    }
+  };
+
+  return {
+    enqueue: (fn) =>
+      new Promise((resolve, reject) => {
+        queue.push({ fn, resolve, reject });
+        processQueue(); // Attempt to process the queue immediately
+      }),
+    maxRequestsPerSecond, // Expose the maxRequestsPerSecond value
+  };
+};
+
+const queueManager = createQueueManager(2); // 2 requests per second
 export { getLeads, getTaskByLeadId };
