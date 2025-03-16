@@ -1,10 +1,8 @@
 /** TODO: remake cards as a table with contacts info */
 
-import { getState, updateState } from './state';
+import { getState, markLeadAsRendered, isLeadRendered } from './state';
 import { queueManager, getTaskByLeadId } from './amoapi';
-
-// Track already rendered lead IDs
-const renderedLeads = new Set();
+import { debounce } from './utils';
 
 /**
  * Render the leads in the UI.
@@ -14,11 +12,11 @@ export const renderLeads = () => {
   const grid = document.getElementById('maingrid');
 
   leads.forEach((lead) => {
-    if (!renderedLeads.has(lead.id)) {
+    if (!isLeadRendered(lead.id)) {
       // If the lead is not already rendered, create and append its card
       const card = createCardElement(lead);
       grid.appendChild(card);
-      renderedLeads.add(lead.id); // Mark the lead as rendered
+      markLeadAsRendered(lead.id); // Mark the lead as rendered
     } else {
       // Optional: Update the existing lead card if its data has changed
       const existingCard = document.getElementById(`card-${lead.id}`);
@@ -122,7 +120,7 @@ const cardClickHandler = (event) => {
 
   // Fetch additional data (e.g., task details) for the lead using queueManager
   queueManager
-    .enqueue(() => getTaskByLeadId(clickedCardId), clickedCardId)
+    .enqueue((signal) => getTaskByLeadId(clickedCardId, signal), clickedCardId)
     .then((data) => {
       const childTaskCard = cardEl.querySelector('.taskcard');
       const childTaskLoader = childTaskCard.querySelector('.taskloader');
@@ -155,6 +153,9 @@ const cardClickHandler = (event) => {
     });
 };
 
+// Wrap the cardClickHandler with debounce
+const debouncedCardClickHandler = debounce(cardClickHandler, 300); // 300ms debounce
+
 /**
  * Create a card element with the given lead data.
  * @param {Object} cardData - The data of the lead.
@@ -178,7 +179,7 @@ const createCardElement = (cardData) => {
       </div>
       <div class="flex flex-col gap-2 text-center taskdata"></div>
     </div>`;
-  card.addEventListener('click', cardClickHandler, false); // Add click event listener
+  card.addEventListener('click', debouncedCardClickHandler, false); // Use the debounced handler
   return card;
 };
 

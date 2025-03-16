@@ -51,11 +51,12 @@ export const getLeads = async (startPage = 1, limit = 3) => {
         // Collect all contact detail requests
         const contactRequests = [];
         for (const lead of leads) {
-          const contactLinks = lead?._embedded?.contacts?.map((contact) => {
-            const href = contact?._links?.self?.href || '';
-            const contactId = href.split('/').pop().split('?')[0];
-            return contactId;
-          });
+          const contactLinks = new Set(
+            lead?._embedded?.contacts?.map((contact) => {
+              const href = contact?._links?.self?.href || '';
+              return href.split('/').pop().split('?')[0];
+            }),
+          );
 
           if (contactLinks) {
             for (const contactId of contactLinks) {
@@ -126,14 +127,14 @@ export const getContactDetails = async (contactId) => {
 /**
  * Fetch task by lead ID from the API.
  * @param {string} id - The ID of the lead.
+ * @param {AbortSignal} signal - The AbortController signal to cancel the request.
  * @returns {Promise<Object>} - The task data for the lead.
  */
-export const getTaskByLeadId = async (id) => {
+export const getTaskByLeadId = async (id, signal) => {
   try {
-    const response = await queueManager.enqueue(() =>
-      amoapi.get(
-        `/v4/tasks?filter%5Bentity_type%5D=leads&filter%5Bentity_id%5D=${id}`,
-      ),
+    const response = await amoapi.get(
+      `/v4/tasks?filter%5Bentity_type%5D=leads&filter%5Bentity_id%5D=${id}`,
+      { signal },
     );
     const data = response.data;
     if (data?._embedded?.tasks?.length) {
@@ -146,7 +147,11 @@ export const getTaskByLeadId = async (id) => {
       };
     }
   } catch (error) {
-    console.error('Error fetching task by lead ID:', error);
+    if (axios.isCancel(error)) {
+      console.warn(`Request for lead ID ${id} was canceled.`);
+    } else {
+      console.error('Error fetching task by lead ID:', error);
+    }
     return {
       text: 'Error fetching task!',
       id: 'Error!',
@@ -156,13 +161,16 @@ export const getTaskByLeadId = async (id) => {
 };
 
 /**
- * Global queue manager to handle API requests with configurable concurrency and delay.
+ * Global queue manager to handle API requests with configurable concurrency and aborting.
  * @param {number} [maxRequestsPerSecond=2] - The maximum number of requests per second.
  */
 const createQueueManager = (maxRequestsPerSecond = 2) => {
   const queue = [];
   let tokens = maxRequestsPerSecond; // Start with the maximum number of tokens
   const tokenInterval = 1000 / maxRequestsPerSecond; // Time interval to add one token (in ms)
+
+  // Map to track active requests and their AbortControllers
+  const activeRequests = new Map();
 
   // Refill tokens at the configured rate
   setInterval(() => {
@@ -178,22 +186,51 @@ const createQueueManager = (maxRequestsPerSecond = 2) => {
       tokens -= batch.length; // Consume tokens for the batch
 
       // Process all requests in the batch concurrently
-      batch.forEach(({ fn, resolve, reject }) => {
+      batch.forEach(({ fn, resolve, reject, key }) => {
         fn()
           .then(resolve)
           .catch(reject)
           .finally(() => {
-            // After the request is resolved, attempt to process the queue again
-            processQueue();
+            // Remove the request from activeRequests once it's resolved
+            if (key) {
+              activeRequests.delete(key);
+            }
+            processQueue(); // Attempt to process the queue again
           });
       });
     }
   };
 
   return {
-    enqueue: (fn) =>
+    /**
+     * Enqueue a request with optional aborting functionality.
+     * @param {Function} fn - The function to execute the request.
+     * @param {string} [key] - A unique key to identify the request (e.g., leadId).
+     * @returns {Promise} - A promise that resolves or rejects with the request result.
+     */
+    enqueue: (fn, key) =>
       new Promise((resolve, reject) => {
-        queue.push({ fn, resolve, reject });
+        // Abort the previous request if a key is provided
+        if (key && activeRequests.has(key)) {
+          const { controller } = activeRequests.get(key);
+          controller.abort(); // Abort the previous request
+          activeRequests.delete(key); // Remove it from the activeRequests map
+        }
+
+        // Create a new AbortController for the request
+        const controller = new AbortController();
+        const signal = controller.signal;
+
+        // Wrap the request function to include the AbortController signal
+        const wrappedFn = () => fn(signal);
+
+        // Track the new request in activeRequests
+        if (key) {
+          activeRequests.set(key, { controller });
+        }
+
+        // Add the request to the queue
+        queue.push({ fn: wrappedFn, resolve, reject, key });
         processQueue(); // Attempt to process the queue immediately
       }),
     maxRequestsPerSecond, // Expose the maxRequestsPerSecond value
