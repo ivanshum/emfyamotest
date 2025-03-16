@@ -77,3 +77,16 @@ export const cacheTask = (leadId, task) => {
 export const getCachedTask = (leadId) => {
   return state.cachedTasks.get(leadId) || null;
 };
+
+/**
+ * Update the state with the fetched task data.
+ * @param {string} leadId - The ID of the lead.
+ * @param {Object} task - The task data to update.
+ */
+export const updateTaskInState = (leadId, task) => {
+  const { leads } = getState();
+  const updatedLeads = leads.map((lead) =>
+    lead.id === leadId ? { ...lead, task } : lead,
+  );
+  updateState({ leads: updatedLeads });
+};

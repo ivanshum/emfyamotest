@@ -5,6 +5,7 @@ import {
   markLeadAsRendered,
   isLeadRendered,
   updateState,
+  updateTaskInState,
 } from './state';
 import { queueManager, getTaskByLeadId } from './amoapi';
 import { debounce } from './utils';
@@ -51,8 +52,7 @@ function getColorClass(unixTimestamp) {
     return 'fill-red-500';
   }
 
-  // Adjust the timestamp to account for the timezone difference related to https://github.com/amocrm/amocrm-api-php/issues/402 because it is an AmoCRM internal problem
-  const date = new Date((unixTimestamp - 3 * 3600) * 1000); // Subtract 3 hours (10800 seconds)
+  const date = new Date(unixTimestamp * 1000); // No timezone adjustment needed
   const today = new Date();
   today.setHours(0, 0, 0, 0); // Set time components to midnight
   const tomorrow = new Date(today);
@@ -109,49 +109,20 @@ const cardClickHandler = (event) => {
   // Close the card if it's already open
   if (openedCardId === clickedCardId) {
     updateState({ openedCardId: '' }); // Reset the opened card in the state
-    hideAllElements('taskcard');
-    hideAllElements('taskloader');
-    clearAllElements('taskdata');
+    resetCardUI(); // Reset the UI for all cards
     return;
   }
 
   // Open the clicked card
   updateState({ openedCardId: clickedCardId });
-  hideAllElements('taskcard');
-  hideAllElements('taskloader');
-  clearAllElements('taskdata');
-  showElement(cardEl, 'taskcard');
-  showElement(cardEl, 'taskloader');
+  resetCardUI(cardEl); // Reset the UI and show elements for the clicked card
 
   // Fetch additional data (e.g., task details) for the lead using queueManager
   queueManager
     .enqueue((signal) => getTaskByLeadId(clickedCardId, signal), clickedCardId)
-    .then((data) => {
-      const childTaskCard = cardEl.querySelector('.taskcard');
-      const childTaskLoader = childTaskCard.querySelector('.taskloader');
-      const childTaskData = childTaskCard.querySelector('.taskdata');
-
-      // Hide the loader and display the fetched data
-      childTaskLoader.classList.add('hidden');
-
-      const date = new Date((data.complete_till - 3 * 3600) * 1000); // Adjust for timezone
-      const statusClass = getColorClass(data.complete_till);
-
-      childTaskData.innerHTML = `
-        <div class="text-sm">Task name: ${data.text}</div>
-        <div class="text-sm">Task ID: ${data.id}</div>
-        <div class="text-sm">Complete by: ${date.toLocaleDateString(undefined, {
-          weekday: 'long',
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric',
-        })} ${date.toLocaleTimeString()}</div>
-        <div class="p-2">
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-2 h-2 ${statusClass}">
-            <circle cx="50%" cy="50%" r="50%" />
-          </svg>
-        </div>
-      `;
+    .then((task) => {
+      renderTaskDetails(cardEl, task); // Render the task details
+      updateTaskInState(clickedCardId, task); // Update the state with the task data
     })
     .catch((error) => {
       console.error('Error fetching task details:', error);
@@ -197,4 +168,52 @@ const updateCardElement = (card, cardData) => {
   card.querySelector('h2').textContent = cardData.name;
   card.querySelector('.text-sm').textContent = `${cardData.price} ₽`;
   card.querySelector('.text-xs').textContent = cardData.id;
+};
+
+/**
+ * Render task details for a lead.
+ * @param {HTMLElement} cardEl - The card element to update.
+ * @param {Object} task - The task data to render.
+ */
+export const renderTaskDetails = (cardEl, task) => {
+  const childTaskCard = cardEl.querySelector('.taskcard');
+  const childTaskLoader = childTaskCard.querySelector('.taskloader');
+  const childTaskData = childTaskCard.querySelector('.taskdata');
+
+  // Hide the loader and display the fetched data
+  childTaskLoader.classList.add('hidden');
+
+  const date = new Date(task.complete_till * 1000); // No timezone adjustment needed
+  const statusClass = getColorClass(task.complete_till);
+
+  childTaskData.innerHTML = `
+    <div class="text-sm">Task name: ${task.text}</div>
+    <div class="text-sm">Task ID: ${task.id}</div>
+    <div class="text-sm">Complete by: ${date.toLocaleDateString(undefined, {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    })} ${date.toLocaleTimeString()}</div>
+    <div class="p-2">
+      <svg xmlns="http://www.w3.org/2000/svg" class="w-2 h-2 ${statusClass}">
+        <circle cx="50%" cy="50%" r="50%" />
+      </svg>
+    </div>
+  `;
+};
+
+/**
+ * Reset the UI for all cards and optionally show specific elements for a given card.
+ * @param {HTMLElement} [cardEl] - The card element to show specific elements for (optional).
+ */
+const resetCardUI = (cardEl = null) => {
+  hideAllElements('taskcard');
+  hideAllElements('taskloader');
+  clearAllElements('taskdata');
+
+  if (cardEl) {
+    showElement(cardEl, 'taskcard');
+    showElement(cardEl, 'taskloader');
+  }
 };
