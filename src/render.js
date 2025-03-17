@@ -1,5 +1,3 @@
-/** TODO: remake cards as a table with contacts info */
-
 import {
   getState,
   markLeadAsRendered,
@@ -11,34 +9,34 @@ import { queueManager, getTaskByLeadId } from './amoapi';
 import { debounce } from './utils';
 
 /**
+ * Show or hide the loader.
+ */
+export const renderLoader = () => {
+  const { isLoading } = getState();
+  const loader = document.getElementById('mainloader');
+  loader.classList.toggle('hidden', !isLoading);
+};
+
+/**
  * Render the leads in the UI.
  */
 export const renderLeads = () => {
   const { leads } = getState();
   const grid = document.getElementById('maingrid');
-
   leads.forEach((lead) => {
     if (!isLeadRendered(lead.id)) {
       // If the lead is not already rendered, create and append its card
       const card = createCardElement(lead);
       grid.appendChild(card);
+      setTaskCardValues(card.querySelector('.leadcarddata'), lead); // Set values for the card fields
       markLeadAsRendered(lead.id); // Mark the lead as rendered
     } else {
-      // Optional: Update the existing lead card if its data has changed
+      // Update the existing lead card if its data has changed
       const existingCard = document.getElementById(`card-${lead.id}`);
       if (existingCard) {
-        updateCardElement(existingCard, lead);
+        setTaskCardValues(existingCard.querySelector('.leadcarddata'), lead);
       }
     }
-  });
-};
-/**
- * Hide all elements with the given class name.
- * @param {string} className - The class name of the elements to hide.
- */
-const hideAllElements = (className) => {
-  [...document.getElementsByClassName(className)].forEach((element) => {
-    element.classList.add('hidden');
   });
 };
 
@@ -68,34 +66,6 @@ function getColorClass(unixTimestamp) {
 }
 
 /**
- * Clear the inner HTML of all elements with the given class name.
- * @param {string} className - The class name of the elements to clear.
- */
-const clearAllElements = (className) => {
-  [...document.getElementsByClassName(className)].forEach((element) => {
-    element.innerHTML = '';
-  });
-};
-
-/**
- * Show the element with the given class name inside the specified element.
- * @param {HTMLElement} element - The parent element.
- * @param {string} className - The class name of the element to show.
- */
-const showElement = (element, className) => {
-  element.querySelector(`.${className}`).classList.remove('hidden');
-};
-
-/**
- * Show or hide the loader.
- */
-export const renderLoader = () => {
-  const { isLoading } = getState();
-  const loader = document.getElementById('mainloader');
-  loader.classList.toggle('hidden', !isLoading);
-};
-
-/**
  * Handle the click event on a card element to fetch and display additional data.
  * @param {Event} event - The click event.
  */
@@ -121,6 +91,7 @@ const cardClickHandler = (event) => {
   queueManager
     .enqueue((signal) => getTaskByLeadId(clickedCardId, signal), clickedCardId)
     .then((task) => {
+      hideTaskLoader(cardEl); // Hide the task loader
       renderTaskDetails(cardEl, task); // Render the task details
       updateTaskInState(clickedCardId, task); // Update the state with the task data
     })
@@ -128,7 +99,10 @@ const cardClickHandler = (event) => {
       console.error('Error fetching task details:', error);
     });
 };
-
+const hideTaskLoader = (cardEl) => {
+  cardEl.querySelector('.taskloader').classList.add('hidden');
+  cardEl.querySelector('.taskcard .taskdata').classList.remove('hidden');
+};
 // Wrap the cardClickHandler with debounce
 const debouncedCardClickHandler = debounce(cardClickHandler, 300); // 300ms debounce
 
@@ -141,33 +115,115 @@ const createCardElement = (cardData) => {
   const card = document.createElement('div');
   card.id = `card-${cardData.id}`;
   card.dataset.leadid = cardData.id;
-  card.className =
-    'relative block w-full bg-white border border-gray-200 rounded-lg shadow hover:bg-gray-100 dark:bg-gray-800 dark:border-gray-700 dark:hover:bg-gray-700';
+  card.className = 'flex flex-col';
   card.innerHTML = `
-    <div class="p-6">
-      <h2 class="text-base text-center">${cardData.name}</h2>
-      <div class="text-sm">${cardData.price} €</div>
-      <div class="text-xs text-gray-600 text-right">${cardData.id}</div>
-    </div>
-    <div class="taskcard hidden">
-      <div class="absolute bottom-0 w-full bg-gray-200 rounded-b -translate-y-0 taskloader">
-        <div style="width: 100%" class="absolute bottom-0 h-4 rounded-b cardloadbar"></div>
+    <div
+      class="leadcarddata flex flex-col lg:flex-row w-full bg-white border-b border-gray-200 hover:bg-gray-100 cursor-pointer"
+    >
+      <div
+        class="flex order-6 lg:order-1 w-full px-2 py-1 lg:w-32 truncate justify-between lg:justify-norma"
+      >
+        <span class="text-sm text-gray-400 lg:hidden">Id:</span>
+        <span class="truncate leadid text-sm text-gray-400"></span>
       </div>
-      <div class="flex flex-col gap-2 text-center taskdata"></div>
-    </div>`;
+      <div
+        class="flex order-1 lg:order-2 w-full px-2 py-1 lg:flex-1 truncate justify-between lg:justify-norma"
+      >
+        <span class="truncate leadname font-semibold text-xl lg:text-base"></span>
+      </div>
+      <div
+        class="flex order-3 w-full px-2 py-1 lg:w-40 truncate justify-between lg:justify-norma"
+      >
+        <span class="lg:font-semibold lg:hidden">Бюджет:</span>
+        <span class="truncate leadprice"></span>
+      </div>
+      <div
+        class="flex order-4 w-full px-2 py-1 lg:w-60 truncate justify-between lg:justify-normal"
+      >
+        <span class="lg:font-semibold lg:hidden">Контакт:</span>
+        <span class="truncate leadcontact"></span>
+      </div>
+      <div
+        class="flex order-5 w-full px-2 py-1 lg:w-60 truncate justify-between lg:justify-norma"
+      >
+        <span class="lg:font-semibold lg:hidden">Телефон:</span>
+        <span class="truncate leadphone"></span>
+      </div>
+    </div>
+    <div class="taskcard hidden w-full grow bg-gray-50">
+      <div class="relative w-full h-4 bg-gray-200 rounded-b taskloader">
+        <div class="absolute inset-0 w-full h-full cardloadbar"></div>
+      </div>
+      <div class="hidden p-4 taskdata">
+        <div class="text-lg font-semibold taskname"></div>
+        <div class="flex justify-between items-center py-2">
+          <div>
+            <span class="text-sm text-gray-600">Выполнить до:</span>
+            <span class="text-sm text-gray-600 taskdate"></span>
+          </div>
+          <div>
+            <span class="text-sm text-gray-400">ID:</span>
+            <span class="text-sm text-gray-400 taskid"></span>
+          </div>
+        </div>
+        <div class="">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 taskstatus">
+            <circle cx="50%" cy="50%" r="50%" />
+          </svg>
+        </div>
+      </div>
+    </div>
+  `;
   card.addEventListener('click', debouncedCardClickHandler, false); // Use the debounced handler
   return card;
 };
 
 /**
- * Update an existing card element with new lead data.
- * @param {HTMLElement} card - The existing card element.
- * @param {Object} cardData - The updated data of the lead.
+ * Set values for a card element's fields.
+ * @param {HTMLElement} card - The card element to update.
+ * @param {Object} cardData - The data of the lead.
  */
-const updateCardElement = (card, cardData) => {
-  card.querySelector('h2').textContent = cardData.name;
-  card.querySelector('.text-sm').textContent = `${cardData.price} ₽`;
-  card.querySelector('.text-xs').textContent = cardData.id;
+const setTaskCardValues = (card, cardData) => {
+  const idElement = card.querySelector('.leadid');
+  const nameElement = card.querySelector('.leadname');
+  const priceElement = card.querySelector('.leadprice');
+  const contactNameElement = card.querySelector('.leadcontact');
+  const phoneElement = card.querySelector('.leadphone');
+
+  // Update elements if they exist
+  if (idElement) {
+    idElement.textContent = cardData.id || '';
+    idElement.title = cardData.id || '';
+  }
+  if (nameElement) {
+    nameElement.textContent = cardData.name || '';
+    nameElement.title = cardData.name || '';
+  }
+  if (priceElement) {
+    priceElement.textContent = `${cardData.price + ` ₽` || ''}`;
+    priceElement.title = `${cardData.price + ` ₽` || ''}`;
+  }
+  if (contactNameElement) {
+    contactNameElement.textContent = cardData.contactName || '';
+    contactNameElement.title = cardData.contactName || '';
+  }
+  if (phoneElement) {
+    phoneElement.textContent = formatPhone(cardData.contactPhone);
+    phoneElement.title = formatPhone(cardData.contactPhone);
+  }
+};
+
+/**
+ * Format phone number to a less strict format.
+ * @param {string} phone - The phone number to format.
+ * @returns {string} - The formatted phone number.
+ */
+const formatPhone = (phone) => {
+  if (!phone) return '';
+  const match = phone.match(/^(\+\d{1,3})(\d{3})(\d{3})(\d{2})(\d{2})$/);
+  return match
+    ? `${match[1]} ${match[2]} ${match[3]} ${match[4]} ${match[5]}`
+    : phone;
 };
 
 /**
@@ -176,31 +232,43 @@ const updateCardElement = (card, cardData) => {
  * @param {Object} task - The task data to render.
  */
 export const renderTaskDetails = (cardEl, task) => {
-  const childTaskCard = cardEl.querySelector('.taskcard');
-  const childTaskLoader = childTaskCard.querySelector('.taskloader');
-  const childTaskData = childTaskCard.querySelector('.taskdata');
-
-  // Hide the loader and display the fetched data
-  childTaskLoader.classList.add('hidden');
+  const taskDetailsContainer = cardEl.querySelector('.taskcard .taskdata');
+  const taskNameElement = taskDetailsContainer.querySelector('.taskname');
+  const taskDateElement = taskDetailsContainer.querySelector('.taskdate');
+  const taskIdElement = taskDetailsContainer.querySelector('.taskid');
+  const taskStatusElement =
+    taskDetailsContainer.querySelector('.taskstatus circle');
 
   const date = new Date(task.complete_till * 1000); // No timezone adjustment needed
   const statusClass = getColorClass(task.complete_till);
 
-  childTaskData.innerHTML = `
-    <div class="text-sm">Task name: ${task.text}</div>
-    <div class="text-sm">Task ID: ${task.id}</div>
-    <div class="text-sm">Complete by: ${date.toLocaleDateString(undefined, {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    })} ${date.toLocaleTimeString()}</div>
-    <div class="p-2">
-      <svg xmlns="http://www.w3.org/2000/svg" class="w-2 h-2 ${statusClass}">
-        <circle cx="50%" cy="50%" r="50%" />
-      </svg>
-    </div>
-  `;
+  // Update task details
+  taskNameElement.textContent = task.text || '';
+  taskDateElement.textContent = date.toLocaleDateString(undefined, {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+  taskIdElement.textContent = task.id || '';
+  taskStatusElement.classList.add(statusClass);
+};
+
+/**
+ * Hide all task cards by adding the 'hidden' class to their details container.
+ */
+const restoreCards = () => {
+  document.querySelectorAll('div[id^="card-"]').forEach((card) => {
+    card.classList.remove('border-1', 'border-blue-500');
+    const taskCardElement = card.querySelector('.taskcard');
+    taskCardElement.classList.add('hidden');
+    taskCardElement.querySelector('.taskloader').classList.remove('hidden');
+  });
+};
+
+const openCardElement = (cardEl) => {
+  cardEl.querySelector('.taskcard').classList.remove('hidden');
+  cardEl.classList.add('border-1', 'border-blue-500');
 };
 
 /**
@@ -208,12 +276,9 @@ export const renderTaskDetails = (cardEl, task) => {
  * @param {HTMLElement} [cardEl] - The card element to show specific elements for (optional).
  */
 const resetCardUI = (cardEl = null) => {
-  hideAllElements('taskcard');
-  hideAllElements('taskloader');
-  clearAllElements('taskdata');
-
+  console.log(cardEl);
+  restoreCards();
   if (cardEl) {
-    showElement(cardEl, 'taskcard');
-    showElement(cardEl, 'taskloader');
+    openCardElement(cardEl);
   }
 };

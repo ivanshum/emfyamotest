@@ -7,12 +7,19 @@
     <title>Vite App</title>
   </head>
   <body>
-    <div class="container mx-auto px-8" id="app">
-      <h1 class="text-xl pb-2">Сделки из AMO</h1>
-      <div
-        id="maingrid"
-        class="grid grid-cols-1 lg:grid-cols-3 md:grid-cols-2 gap-2"
-      ></div>
+    <div class="w-full mx-auto p-2 lg:p-8" id="app">
+      <h1 class="text-xl lg:text-2xl pb-2 lg:pb-4">Сделки из AMO</h1>
+      <div id="maingrid" class="flex flex-col gap-2 lg:gap-0">
+        <div
+          class="hidden lg:flex w-full bg-gray-100 text-gray-700 font-semibold border-b border-gray-300"
+        >
+          <span class="w-32 px-2 py-1 truncate">Id</span>
+          <span class="flex-1 px-2 py-1 truncate">Название сделки</span>
+          <span class="w-40 px-2 py-1 truncate">Бюджет</span>
+          <span class="w-60 px-2 py-1 truncate">Контакт</span>
+          <span class="w-60 px-2 py-1 truncate">Телефон</span>
+        </div>
+      </div>
       <div class="text-center hidden pt-2" id="mainloader">
         <div role="status">
           <svg
