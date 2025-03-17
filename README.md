@@ -41,7 +41,16 @@ curl https://ivanivanshumshumilov.amocrm.ru/oauth2/access_token -d \
 -X POST
 ```
 
-Токены лежат в .env в репозитории. Если ACCESSTOKEN протух, то можно воспользоваться рефрешем, ну или передернуть интеграцию и получить заново
+Токены лежат в .env в репозитории. Если ACCESSTOKEN протух, то можно воспользоваться рефрешем
+
+```bash
+curl https://ivanivanshumshumilov.amocrm.ru/oauth2/access_token -d \
+'{"client_id":"<Id интеграции>","client_secret":"<Секретный ключ>","grant_type":"refresh_token","refresh_token":"<Refresh токен>","redirect_uri":"https://ivanivanshumshumilov.amocrm.ru/"}' \
+-H 'Content-Type:application/json' \
+-X POST
+```
+
+Или переподключить интеграцию и получить ACCESSTOKEN заново
 Хранить в репе не стоит конечно, но для теста можно.
 В принципе можно сделать и долгоживущий токен, но так обычно лучше, чтобы избежать утечки.
 
